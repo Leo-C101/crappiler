@@ -9,7 +9,7 @@ use crate::crappiler::CrapError;
 #[derive(Debug, Parser)]
 struct Args {
     input_path: PathBuf,
-    #[arg(long, short, default_value = "out.asm")]
+    #[arg(long, short, default_value = "out")]
     output_path: PathBuf,
 }
 
@@ -45,17 +45,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let elapsed = Instant::now() - start;
 
-    match fs::write(&args.output_path, compiled) {
+    match fs::write("out.asm", compiled) {
         Ok(()) => {
             println!("compilation successful. took {:?}", elapsed);
-            Ok(())
         }
         Err(e) => {
             println!(
                 "error: failed to write to output file '{}': {e}",
                 args.output_path.display()
             );
-            Err(Box::new(e))
+            return Err(Box::new(e));
         }
     }
+
+    let _ = std::process::Command::new("nasm")
+        .args(["-felf64", "out.asm", "-o", "out.o"])
+        .output()?;
+
+    let _ = std::process::Command::new("ld")
+        .args(["out.o", "-o", args.output_path.to_str().unwrap()])
+        .output()?;
+
+    let _ = std::process::Command::new("rm")
+        .args(["out.asm", "out.o"])
+        .output()?;
+
+    Ok(())
 }

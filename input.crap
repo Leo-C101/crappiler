@@ -1,2 +1,5 @@
-print("Hello, World!");
+println("Hello, World!");
+println("This is from my compiler!");
+println("This is a really inefficient way of compiling.");
+println("I'm just going to use LLVM");
 exit(0);
