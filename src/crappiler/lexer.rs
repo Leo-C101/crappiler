@@ -9,6 +9,9 @@ pub enum TokenKind {
     Exit,
     Print,
     Println,
+    Fn,
+    Return,
+    I32,
 
     Plus,
     Minus,
@@ -17,15 +20,23 @@ pub enum TokenKind {
 
     LParen,
     RParen,
+    LBrace,
+    RBrace,
+    Comma,
+    Colon,
+    Arrow,
     Semicolon,
 
     EOF,
 }
 
-const KEYWORDS: [(&str, TokenKind); 3] = [
+const KEYWORDS: [(&str, TokenKind); 6] = [
     ("exit", TokenKind::Exit),
     ("print", TokenKind::Print),
     ("println", TokenKind::Println),
+    ("fn", TokenKind::Fn),
+    ("return", TokenKind::Return),
+    ("i32", TokenKind::I32),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,6 +97,10 @@ impl Lexer {
                 '+' => {
                     self.push_token(TokenKind::Plus);
                 }
+                '-' if self.src[self.pos..].starts_with("->") => {
+                    self.push_token(TokenKind::Arrow);
+                    self.advance();
+                }
                 '-' => {
                     self.push_token(TokenKind::Minus);
                 }
@@ -100,6 +115,18 @@ impl Lexer {
                 }
                 ')' => {
                     self.push_token(TokenKind::RParen);
+                }
+                '{' => {
+                    self.push_token(TokenKind::LBrace);
+                }
+                '}' => {
+                    self.push_token(TokenKind::RBrace);
+                }
+                ',' => {
+                    self.push_token(TokenKind::Comma);
+                }
+                ':' => {
+                    self.push_token(TokenKind::Colon);
                 }
                 ';' => {
                     self.push_token(TokenKind::Semicolon);

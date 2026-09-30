@@ -1,5 +1,12 @@
-println("Hello, World!");
-println("This is from my compiler!");
-println("This is a really inefficient way of compiling.");
-println("I'm just going to use LLVM");
-exit(0);
+fn print_messages() -> i32 {
+	println("Hello, World!");
+	println("This is from my compiler!");
+	println("This is a really inefficient way of compiling.");
+	println("I'm just going to use LLVM");
+	return 0;
+}
+
+fn main() -> i32 {
+	print_messages();
+	return 1;
+}

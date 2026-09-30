@@ -7,7 +7,7 @@ pub fn parse(tokens: Vec<Token>) -> Result<Vec<Stmt>, CrapError> {
     Parser::new(tokens).parse()
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     NumberExpr(i32),
     StringExpr(String),
@@ -16,6 +16,14 @@ pub enum Expr {
         l: Box<Expr>,
         r: Box<Expr>,
         op: char,
+    },
+    CallExpr {
+        name: String,
+        args: Vec<Expr>,
+    },
+    UnaryExpr {
+        op: char,
+        expr: Box<Expr>,
     },
 }
 
@@ -27,9 +35,22 @@ impl Expr {
 
 #[derive(Debug)]
 pub enum Stmt {
-    PrintStmt { value: Expr, newline: bool },
-    ExitStmt { value: Expr },
+    PrintStmt {
+        value: Expr,
+        newline: bool,
+    },
+    ExitStmt {
+        value: Expr,
+    },
+    ReturnStmt {
+        value: Expr,
+    },
     ExprStmt(Expr),
+    FunctionDecl {
+        name: String,
+        params: Vec<String>,
+        body: Vec<Stmt>,
+    },
 }
 
 struct Parser {
@@ -46,7 +67,12 @@ impl Parser {
         let mut stmts = Vec::new();
 
         while !self.at_end() {
-            stmts.push(self.parse_statement()?);
+            if !self.match_kind(TokenKind::Fn) {
+                return Err(CrapError::InvalidFunction {
+                    message: "only function declarations are allowed at the top level".to_string(),
+                });
+            }
+            stmts.push(self.parse_function()?);
         }
 
         Ok(stmts)
@@ -58,8 +84,73 @@ impl Parser {
 
             TokenKind::Exit => self.parse_exit(),
 
-            _ => Ok(Stmt::ExprStmt(self.parse_expression()?)),
+            TokenKind::Return => self.parse_return(),
+
+            _ => {
+                let expr = self.parse_expression()?;
+                self.consume(TokenKind::Semicolon)?;
+                Ok(Stmt::ExprStmt(expr))
+            }
         }
+    }
+
+    fn parse_function(&mut self) -> Result<Stmt, CrapError> {
+        self.pos += 1;
+        let name = match self.consume_identifier()? {
+            TokenKind::Identifier(name) => name,
+            _ => unreachable!(),
+        };
+
+        self.consume(TokenKind::LParen)?;
+        let mut params = Vec::new();
+        if !self.match_kind(TokenKind::RParen) {
+            loop {
+                let param = match self.consume_identifier()? {
+                    TokenKind::Identifier(name) => name,
+                    _ => unreachable!(),
+                };
+                self.consume(TokenKind::Colon)?;
+                self.consume(TokenKind::I32)?;
+                params.push(param);
+
+                if !self.match_kind(TokenKind::Comma) {
+                    break;
+                }
+                self.pos += 1;
+            }
+        }
+        self.consume(TokenKind::RParen)?;
+        self.consume(TokenKind::Arrow)?;
+        self.consume(TokenKind::I32)?;
+        self.consume(TokenKind::LBrace)?;
+
+        let mut body = Vec::new();
+        while !self.match_kind(TokenKind::RBrace) && !self.at_end() {
+            let stmt = self.parse_statement()?;
+            let is_return = matches!(stmt, Stmt::ReturnStmt { .. });
+            body.push(stmt);
+            if is_return && !self.match_kind(TokenKind::RBrace) {
+                return Err(CrapError::InvalidFunction {
+                    message: format!("return must be the final statement in function '{name}'"),
+                });
+            }
+        }
+        self.consume(TokenKind::RBrace)?;
+
+        if !matches!(body.last(), Some(Stmt::ReturnStmt { .. })) {
+            return Err(CrapError::InvalidFunction {
+                message: format!("function '{name}' must end with a return statement"),
+            });
+        }
+
+        Ok(Stmt::FunctionDecl { name, params, body })
+    }
+
+    fn parse_return(&mut self) -> Result<Stmt, CrapError> {
+        self.pos += 1;
+        let value = self.parse_expression()?;
+        self.consume(TokenKind::Semicolon)?;
+        Ok(Stmt::ReturnStmt { value })
     }
 
     fn parse_print(&mut self) -> Result<Stmt, CrapError> {
@@ -144,7 +235,30 @@ impl Parser {
         match self.peek().kind.clone() {
             TokenKind::Identifier(ident) => {
                 self.pos += 1;
-                Ok(Expr::VariableExpr(ident))
+                if self.match_kind(TokenKind::LParen) {
+                    self.pos += 1;
+                    let mut args = Vec::new();
+                    if !self.match_kind(TokenKind::RParen) {
+                        loop {
+                            args.push(self.parse_expression()?);
+                            if !self.match_kind(TokenKind::Comma) {
+                                break;
+                            }
+                            self.pos += 1;
+                        }
+                    }
+                    self.consume(TokenKind::RParen)?;
+                    Ok(Expr::CallExpr { name: ident, args })
+                } else {
+                    Ok(Expr::VariableExpr(ident))
+                }
+            }
+            TokenKind::Minus => {
+                self.pos += 1;
+                Ok(Expr::UnaryExpr {
+                    op: '-',
+                    expr: Box::new(self.parse_primary()?),
+                })
             }
             TokenKind::LParen => {
                 self.pos += 1;
@@ -175,6 +289,19 @@ impl Parser {
         self.expect_kind(kind)?;
         self.pos += 1;
         Ok(&self.tokens[self.pos - 1])
+    }
+
+    fn consume_identifier(&mut self) -> Result<TokenKind, CrapError> {
+        match self.peek().kind.clone() {
+            kind @ TokenKind::Identifier(_) => {
+                self.pos += 1;
+                Ok(kind)
+            }
+            _ => Err(CrapError::UnexpectedToken {
+                expected: None,
+                token: self.peek().clone(),
+            }),
+        }
     }
 
     fn expect_kind(&self, kind: TokenKind) -> Result<(), CrapError> {

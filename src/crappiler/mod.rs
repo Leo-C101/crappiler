@@ -38,6 +38,9 @@ pub enum CrapError {
     UnexpectedExpr {
         expr: Expr,
     },
+    InvalidFunction {
+        message: String,
+    },
 }
 
 impl fmt::Display for CrapError {
@@ -71,6 +74,7 @@ impl fmt::Display for CrapError {
             Self::UnexpectedExpr { expr } => {
                 format!("unexpected expression: {:?}", expr)
             }
+            Self::InvalidFunction { message } => message.clone(),
         };
 
         write!(f, "{output}")
@@ -89,4 +93,37 @@ pub fn compile(src: String) -> Result<String, CrapError> {
     let asm = codegen::generate_code(tokens, ast)?;
 
     Ok(asm)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CrapError, compile};
+
+    #[test]
+    fn compiles_i32_function_calls() {
+        let asm = compile(
+            "fn add(a: i32, b: i32) -> i32 { return a + b; } fn main() -> i32 { return add(19, 23); }"
+                .to_string(),
+        )
+        .unwrap();
+
+        assert!(asm.contains("call fn_main"));
+        assert!(asm.contains("call fn_add"));
+        assert!(asm.contains("mov eax, dword [rbp + 24]"));
+        assert!(asm.contains("mov eax, dword [rbp + 16]"));
+        assert!(asm.contains("add eax, ecx"));
+        assert!(asm.contains("mov edi, eax"));
+    }
+
+    #[test]
+    fn requires_main_function() {
+        let result = compile("fn helper() -> i32 { return 0; }".to_string());
+
+        assert!(matches!(result, Err(CrapError::InvalidFunction { .. })));
+    }
+
+    #[test]
+    fn compiles_input_sample() {
+        assert!(compile(include_str!("../../input.crap").to_string()).is_ok());
+    }
 }
