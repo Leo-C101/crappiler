@@ -27,12 +27,6 @@ pub enum Expr {
     },
 }
 
-impl Expr {
-    pub fn is_binary_expr(&self) -> bool {
-        matches!(self, Self::BinaryExpr { .. })
-    }
-}
-
 #[derive(Debug)]
 pub enum Stmt {
     PrintStmt {
